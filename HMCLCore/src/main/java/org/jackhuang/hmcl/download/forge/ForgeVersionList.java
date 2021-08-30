@@ -22,8 +22,16 @@ import org.jackhuang.hmcl.download.VersionList;
 import org.jackhuang.hmcl.util.StringUtils;
 import org.jackhuang.hmcl.util.io.HttpRequest;
 import org.jackhuang.hmcl.util.versioning.VersionNumber;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -45,36 +53,43 @@ public final class ForgeVersionList extends VersionList<ForgeRemoteVersion> {
 
     @Override
     public CompletableFuture<?> refreshAsync() {
-        return HttpRequest.GET(downloadProvider.injectURL(FORGE_LIST)).getJsonAsync(ForgeVersionRoot.class)
-                .thenAcceptAsync(root -> {
+        return HttpRequest.GET(downloadProvider.injectURL(FORGE_LIST)).getStringAsync()
+                .thenAcceptAsync(data -> {
                     lock.writeLock().lock();
 
                     try {
-                        if (root == null)
+                        List<ForgeVersion> versionList = new ArrayList<>();
+                        try {
+                            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                            DocumentBuilder builder = factory.newDocumentBuilder();
+                            Document doc = builder.parse(new InputSource(new StringReader(data)));
+                            NodeList versions = doc.getDocumentElement().getElementsByTagName("version");
+                            for (int i = 0; i < versions.getLength(); i++) {
+                                String version = versions.item(i).getTextContent();
+                                int index = version.indexOf('-');
+                                String mcversion = version.substring(0, index);
+                                int extra = version.lastIndexOf('-');
+                                if (index == extra) {
+                                    versionList.add(new ForgeVersion(mcversion, version.substring(index + 1)));
+                                } else {
+                                    versionList.add(new ForgeVersion(mcversion, version.substring(index + 1, extra), version.substring(extra + 1)));
+                                }
+                            }
+                        } catch (Exception ignore) {
+                        }
+                        if (versionList.isEmpty())
                             return;
                         versions.clear();
 
-                        for (Map.Entry<String, int[]> entry : root.getGameVersions().entrySet()) {
-                            String gameVersion = VersionNumber.normalize(entry.getKey());
-                            for (int v : entry.getValue()) {
-                                ForgeVersion version = root.getNumber().get(v);
-                                if (version == null)
-                                    continue;
-                                String jar = null;
-                                for (String[] file : version.getFiles())
-                                    if (file.length > 1 && "installer".equals(file[1])) {
-                                        String classifier = version.getGameVersion() + "-" + version.getVersion()
-                                                + (StringUtils.isNotBlank(version.getBranch()) ? "-" + version.getBranch() : "");
-                                        String fileName = root.getArtifact() + "-" + classifier + "-" + file[1] + "." + file[0];
-                                        jar = root.getWebPath() + classifier + "/" + fileName;
-                                    }
-
-                                if (jar == null)
-                                    continue;
-                                versions.put(gameVersion, new ForgeRemoteVersion(
-                                        version.getGameVersion(), version.getVersion(), null, Collections.singletonList(jar)
-                                ));
-                            }
+                        for (ForgeVersion version : versionList) {
+                            String gameVersion = VersionNumber.normalize(version.getGameVersion());
+                            String selfVersion = version.getVersion();
+                            String artifactVersion = gameVersion + '-' + selfVersion +
+                                    (version.getExtra() == null ? "" : '-' + version.getExtra());
+                            String jar = FORGE_URL_BASE + artifactVersion + "/forge-" + artifactVersion + "-installer.jar";
+                            versions.put(gameVersion, new ForgeRemoteVersion(
+                                    gameVersion, selfVersion, null, Collections.singletonList(jar)
+                            ));
                         }
                     } finally {
                         lock.writeLock().unlock();
@@ -82,5 +97,6 @@ public final class ForgeVersionList extends VersionList<ForgeRemoteVersion> {
                 });
     }
 
-    public static final String FORGE_LIST = "https://files.minecraftforge.net/maven/net/minecraftforge/forge/json";
+    public static final String FORGE_URL_BASE = "https://maven.minecraftforge.net/net/minecraftforge/forge/";
+    public static final String FORGE_LIST = FORGE_URL_BASE + "maven-metadata.xml";
 }

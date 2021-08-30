@@ -18,7 +18,7 @@
 package org.jackhuang.hmcl.download;
 
 import org.jackhuang.hmcl.download.fabric.FabricVersionList;
-import org.jackhuang.hmcl.download.forge.ForgeBMCLVersionList;
+import org.jackhuang.hmcl.download.forge.ForgeVersionList;
 import org.jackhuang.hmcl.download.game.GameVersionList;
 import org.jackhuang.hmcl.download.liteloader.LiteLoaderVersionList;
 import org.jackhuang.hmcl.download.optifine.OptiFineBMCLVersionList;
@@ -30,7 +30,7 @@ import org.jackhuang.hmcl.download.optifine.OptiFineBMCLVersionList;
 public class MojangDownloadProvider implements DownloadProvider {
     private final GameVersionList game;
     private final FabricVersionList fabric;
-    private final ForgeBMCLVersionList forge;
+    private final ForgeVersionList forge;
     private final LiteLoaderVersionList liteLoader;
     private final OptiFineBMCLVersionList optifine;
 
@@ -39,7 +39,7 @@ public class MojangDownloadProvider implements DownloadProvider {
 
         this.game = new GameVersionList(this);
         this.fabric = new FabricVersionList(this);
-        this.forge = new ForgeBMCLVersionList(apiRoot);
+        this.forge = new ForgeVersionList(this);
         this.liteLoader = new LiteLoaderVersionList(this);
         this.optifine = new OptiFineBMCLVersionList(apiRoot);
     }
